@@ -1,16 +1,13 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
-@Pipe({
-  name: 'searchLanguage'
-})
+@Pipe({ name: 'searchLanguage', standalone: true })
 export class SearchLanguagePipe implements PipeTransform {
-
-  transform(languages: any, searchText: any): any {
-    if(searchText == null) return languages;
-
-    return languages.filter(function(language: {code: string, name: string, nativeName: string}){
-      return language.name.toLowerCase().indexOf(searchText.toLowerCase()) > -1;
-    })
+  transform(
+    languages: { code: string; name: string; nativeName: string }[],
+    searchText: string | null | undefined
+  ): { code: string; name: string; nativeName: string }[] {
+    if (!searchText) return languages;
+    const lower = searchText.toLowerCase();
+    return languages.filter(lang => lang.name.toLowerCase().includes(lower));
   }
-
 }

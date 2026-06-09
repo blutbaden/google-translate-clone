@@ -13,7 +13,6 @@ export class TranslateService {
     let options = {
       headers: new HttpHeaders({
         "content-type": "application/x-www-form-urlencoded",
-        "accept-encoding": "application/gzip",
         "x-rapidapi-key": process.env["NG_APP_GOOGLE_TRANSLATE_API_KEY"] || '',
         "x-rapidapi-host": process.env["NG_APP_GOOGLE_TRANSLATE_API_HOST"] || ''
       })

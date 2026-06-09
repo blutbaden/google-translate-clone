@@ -1,106 +1,113 @@
-import {AfterViewInit, Component, ElementRef, OnInit, ViewChild} from '@angular/core';
-import {TranslateService} from "../../shared/services/translate.service";
-import {languagesCodes} from "../../shared/data/languagesCodes";
-import {EMPTY, fromEvent, throwError} from "rxjs";
-import {debounceTime, distinctUntilChanged, map, switchMap} from "rxjs/operators";
-import {NotifierService} from "angular-notifier";
+import { Component, AfterViewInit, OnDestroy, ElementRef, ViewChild } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { EMPTY, fromEvent, Subscription } from 'rxjs';
+import { catchError, debounceTime, distinctUntilChanged, map, switchMap } from 'rxjs/operators';
+import { ToastrService } from 'ngx-toastr';
+import { TranslateService } from '../../shared/services/translate.service';
+import { languagesCodes } from '../../shared/data/languagesCodes';
+import { SearchLanguagePipe } from '../../shared/pipes/search-language.pipe';
+import { CopyClipboardDirective } from '../../shared/directives/CopyClipboardDirective';
 
 @Component({
   selector: 'app-translate',
+  standalone: true,
+  imports: [FormsModule, SearchLanguagePipe, CopyClipboardDirective],
   templateUrl: './translate.component.html',
   styleUrls: ['./translate.component.css']
 })
-export class TranslateComponent implements OnInit, AfterViewInit {
-
-  sourceLanguage: { code: string; name?: string; nativeName?: string; } | undefined;
-  destinationLanguage: { code: string, name?: string, nativeName?: string } | undefined;
+export class TranslateComponent implements AfterViewInit, OnDestroy {
+  sourceLanguage: { code: string; name?: string; nativeName?: string } | undefined;
+  destinationLanguage: { code: string; name?: string; nativeName?: string } | undefined;
   translatedText: string | undefined;
   languageToSearch: string | undefined;
 
-  isLoading: boolean = false;
-  isSelectLanguageBtnClicked: boolean = false;
-  isSelectSourceBtnClicked: boolean = false;
-  isError: boolean = false;
+  isLoading = false;
+  isSelectLanguageBtnClicked = false;
+  isSelectSourceBtnClicked = false;
+  isError = false;
   errorMessage: string | undefined;
 
-  languagesCodes: { code: string, name: string, nativeName: string }[] = languagesCodes;
+  languagesCodes: { code: string; name: string; nativeName: string }[] = languagesCodes;
 
-  private readonly notifier: NotifierService;
+  private sub: Subscription | undefined;
 
-  @ViewChild('textToTranslateInput') input: ElementRef | undefined
+  @ViewChild('textToTranslateInput') input: ElementRef | undefined;
 
-  constructor(private translateService: TranslateService, notifierService: NotifierService) {
-    this.notifier = notifierService;
-  }
-
-  ngOnInit(): void {
-  }
+  constructor(
+    private translateService: TranslateService,
+    private toastr: ToastrService
+  ) {}
 
   ngAfterViewInit(): void {
-    fromEvent<any>(this.input?.nativeElement, 'keyup').pipe(
-      map(event => event.target.value),
+    this.sub = fromEvent<Event>(this.input!.nativeElement, 'keyup').pipe(
+      map(event => (event.target as HTMLInputElement).value),
       debounceTime(400),
       distinctUntilChanged(),
-      switchMap(textToTranslate => {
-        return this.getTranslation(textToTranslate)
-      })
-    )
-      .subscribe(
-        value => this.translatedText = value,
-        error => {
+      switchMap(text => this.getTranslation(text).pipe(
+        catchError(error => {
           this.isError = true;
-          const {status} = error;
-          if(status === 400){
-            this.errorMessage = "Sorry, this language is not supported!";
-          }else {
-            this.errorMessage = "An error has occurred ! Please retry later.";
-          }
-          throwError(error);
-        },
-        () => this.isLoading = false
-      );
+          this.isLoading = false;
+          const { status } = error;
+          this.errorMessage = status === 400
+            ? 'Sorry, this language is not supported!'
+            : 'An error has occurred! Please retry later.';
+          return EMPTY;
+        })
+      ))
+    ).subscribe({
+      next: value => {
+        this.translatedText = value;
+        this.isLoading = false;
+      }
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.sub?.unsubscribe();
   }
 
   getTranslation(textToTranslate: string) {
-    if(this.checkBeforeTranslate(textToTranslate)){
+    if (this.checkBeforeTranslate(textToTranslate)) {
       this.isLoading = true;
-      return this.translateService.translate(this.sourceLanguage?.code || "", this.destinationLanguage?.code || "", textToTranslate)
-        .pipe(
-          map(res => {
-            const {translations} = res.data;
-            return translations[0].translatedText;
-          })
-        );
+      return this.translateService
+        .translate(this.sourceLanguage?.code ?? '', this.destinationLanguage?.code ?? '', textToTranslate)
+        .pipe(map(res => res.data.translations[0].translatedText as string));
     }
-    return EMPTY
+    this.isLoading = false;
+    return EMPTY;
   }
 
-  checkBeforeTranslate(textToTranslate: string) {
-    return this.sourceLanguage && this.destinationLanguage && textToTranslate && textToTranslate.trim() !== "";
+  checkBeforeTranslate(textToTranslate: string): boolean {
+    return !!(this.sourceLanguage && this.destinationLanguage && textToTranslate?.trim());
   }
 
-  selectLanguage(language: { code: string, name: string, nativeName: string }) {
-    this.isSelectSourceBtnClicked ? this.sourceLanguage = language : this.destinationLanguage = language;
+  selectLanguage(language: { code: string; name: string; nativeName: string }): void {
+    if (this.isSelectSourceBtnClicked) {
+      this.sourceLanguage = language;
+    } else {
+      this.destinationLanguage = language;
+    }
     this.isSelectLanguageBtnClicked = false;
-    this.languageToSearch = ""
+    this.languageToSearch = '';
   }
 
-  getLanguages(isSelectSourceBtnClicked: boolean) {
+  getLanguages(isSelectSourceBtnClicked: boolean): void {
     this.isSelectLanguageBtnClicked = !this.isSelectLanguageBtnClicked;
     this.isSelectSourceBtnClicked = isSelectSourceBtnClicked;
-    this.languageToSearch = "";
+    this.languageToSearch = '';
   }
 
-  isSelectedLanguage(languageCode: string) {
-    return this.isSelectSourceBtnClicked ? languageCode === this.sourceLanguage?.code :
-      languageCode === this.destinationLanguage?.code;
+  isSelectedLanguage(languageCode: string): boolean {
+    return this.isSelectSourceBtnClicked
+      ? languageCode === this.sourceLanguage?.code
+      : languageCode === this.destinationLanguage?.code;
   }
 
-  public notify(payload: string) {
-    this.notifier.notify('default', 'Copied to clipboard!');
+  notify(_payload: string): void {
+    this.toastr.info('Copied to clipboard!');
   }
 
-  reload() {
+  reload(): void {
     location.reload();
   }
 }
