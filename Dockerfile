@@ -1,7 +1,7 @@
 # ----------------------------
 # build from source
 # ----------------------------
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 
 ARG NG_APP_GOOGLE_TRANSLATE_API_KEY
 ARG NG_APP_GOOGLE_TRANSLATE_API_HOST
